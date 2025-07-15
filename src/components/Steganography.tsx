@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,14 +27,13 @@ const Steganography = () => {
         };
         reader.readAsDataURL(file);
         
-        // Simulate checking if image has embedded message (in real implementation, this would analyze the image)
-        // For demo purposes, we'll randomly determine if the image has a message
-        const hasMessage = Math.random() > 0.5;
-        setHasEmbeddedMessage(hasMessage);
+        // Reset previous extraction results
+        setExtractedMessage("");
+        setHasEmbeddedMessage(false);
         
         toast({
           title: "Image Selected",
-          description: `Selected: ${file.name}${hasMessage ? ' (Contains hidden message)' : ''}`,
+          description: `Selected: ${file.name}`,
         });
       } else {
         toast({
@@ -43,6 +43,50 @@ const Steganography = () => {
         });
       }
     }
+  };
+
+  // Function to simulate LSB extraction from image data
+  const simulateLSBExtraction = (canvas: HTMLCanvasElement): string => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return "";
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    let binaryString = "";
+    
+    // Extract LSBs from red channel of first 1000 pixels (simulated)
+    for (let i = 0; i < Math.min(1000 * 4, data.length); i += 4) {
+      binaryString += (data[i] & 1).toString(); // Get LSB of red channel
+    }
+    
+    // Convert binary to text (simplified simulation)
+    let extractedText = "";
+    for (let i = 0; i < binaryString.length; i += 8) {
+      const byte = binaryString.substr(i, 8);
+      if (byte.length === 8) {
+        const charCode = parseInt(byte, 2);
+        if (charCode >= 32 && charCode <= 126) { // Printable ASCII
+          extractedText += String.fromCharCode(charCode);
+        }
+      }
+    }
+    
+    // If we find meaningful text, return it; otherwise check for patterns
+    if (extractedText.length > 5 && /[a-zA-Z]/.test(extractedText)) {
+      return extractedText.substring(0, 100); // Limit length
+    }
+    
+    // Check for patterns in LSB data that might indicate hidden message
+    const ones = binaryString.split('1').length - 1;
+    const zeros = binaryString.split('0').length - 1;
+    const ratio = ones / zeros;
+    
+    // If ratio is close to 1, it might indicate random data (hidden message)
+    if (ratio > 0.4 && ratio < 0.6) {
+      return "Hidden message detected but appears to be encrypted or corrupted.";
+    }
+    
+    return "";
   };
 
   const embedMessage = async () => {
@@ -81,10 +125,22 @@ const Steganography = () => {
         // Simulate LSB embedding by slightly modifying the image
         const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
         if (imageData) {
-          // Add a subtle watermark effect to show the message was embedded
-          for (let i = 0; i < imageData.data.length; i += 4) {
-            imageData.data[i] = Math.min(255, imageData.data[i] + 1); // Slightly modify red channel
+          // Embed message in LSBs (simulation)
+          const messageBytes = new TextEncoder().encode(secretMessage);
+          let bitIndex = 0;
+          
+          for (let i = 0; i < messageBytes.length && bitIndex < imageData.data.length; i++) {
+            const byte = messageBytes[i];
+            for (let bit = 0; bit < 8 && bitIndex < imageData.data.length; bit++) {
+              const pixelIndex = Math.floor(bitIndex / 3) * 4 + (bitIndex % 3);
+              const bitValue = (byte >> (7 - bit)) & 1;
+              
+              // Modify LSB of pixel channel
+              imageData.data[pixelIndex] = (imageData.data[pixelIndex] & 0xFE) | bitValue;
+              bitIndex++;
+            }
           }
+          
           ctx?.putImageData(imageData, 0, 0);
         }
         
@@ -115,7 +171,7 @@ const Steganography = () => {
     if (!selectedImage) {
       toast({
         title: "Error",
-        description: "Please select a steganographic image first",
+        description: "Please select an image first",
         variant: "destructive"
       });
       return;
@@ -123,40 +179,50 @@ const Steganography = () => {
 
     setIsProcessing(true);
     
-    // Simulate message extraction process
+    // Simulate message extraction process by analyzing actual image data
     setTimeout(() => {
-      // In a real implementation, this would analyze the image's LSB data
-      // For demo purposes, we'll simulate different scenarios
-      let extractedMsg = "";
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = document.createElement('img');
       
-      if (hasEmbeddedMessage) {
-        // Simulate extracting a previously embedded message
-        const possibleMessages = [
-          "This is a secret message hidden in the image!",
-          "Confidential data: Project X starts tomorrow",
-          "Password: SecureKey123",
-          "Meeting at midnight, location undisclosed",
-          "The treasure is buried under the old oak tree"
-        ];
-        extractedMsg = possibleMessages[Math.floor(Math.random() * possibleMessages.length)];
-      } else {
-        // No hidden message found
-        extractedMsg = "No hidden message found in this image.";
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx?.drawImage(img, 0, 0);
+        
+        // Attempt to extract hidden message from LSB data
+        const extractedMsg = simulateLSBExtraction(canvas);
+        
+        if (extractedMsg) {
+          setExtractedMessage(extractedMsg);
+          setHasEmbeddedMessage(true);
+          setIsProcessing(false);
+          toast({
+            title: "Success",
+            description: "Hidden message extracted successfully",
+          });
+        } else {
+          setExtractedMessage("No hidden message found in this image.");
+          setHasEmbeddedMessage(false);
+          setIsProcessing(false);
+          toast({
+            title: "No Message Found",
+            description: "This image doesn't appear to contain any hidden messages using LSB steganography",
+            variant: "destructive"
+          });
+        }
+      };
+      
+      img.onerror = () => {
+        setIsProcessing(false);
         toast({
-          title: "No Message Found",
-          description: "This image doesn't appear to contain any hidden messages",
+          title: "Error",
+          description: "Failed to analyze image",
           variant: "destructive"
         });
-        setIsProcessing(false);
-        return;
-      }
+      };
       
-      setExtractedMessage(extractedMsg);
-      setIsProcessing(false);
-      toast({
-        title: "Success",
-        description: "Hidden message extracted successfully",
-      });
+      img.src = imagePreview;
     }, 1500);
   };
 
@@ -257,7 +323,9 @@ const Steganography = () => {
             <Label className="text-white mb-2 block">Extracted Message</Label>
             <Card className="bg-slate-700/50 border border-slate-600">
               <CardContent className="pt-4">
-                <p className="text-green-400 font-mono">{extractedMessage}</p>
+                <p className={`font-mono ${extractedMessage.includes("No hidden message") ? "text-red-400" : "text-green-400"}`}>
+                  {extractedMessage}
+                </p>
               </CardContent>
             </Card>
           </div>
