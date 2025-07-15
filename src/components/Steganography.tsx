@@ -14,6 +14,7 @@ const Steganography = () => {
   const [extractedMessage, setExtractedMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [imagePreview, setImagePreview] = useState<string>("");
+  const [hasEmbeddedMessage, setHasEmbeddedMessage] = useState(false);
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -25,9 +26,15 @@ const Steganography = () => {
           setImagePreview(e.target?.result as string);
         };
         reader.readAsDataURL(file);
+        
+        // Simulate checking if image has embedded message (in real implementation, this would analyze the image)
+        // For demo purposes, we'll randomly determine if the image has a message
+        const hasMessage = Math.random() > 0.5;
+        setHasEmbeddedMessage(hasMessage);
+        
         toast({
           title: "Image Selected",
-          description: `Selected: ${file.name}`,
+          description: `Selected: ${file.name}${hasMessage ? ' (Contains hidden message)' : ''}`,
         });
       } else {
         toast({
@@ -90,6 +97,8 @@ const Steganography = () => {
             a.download = `stego_${selectedImage.name}`;
             a.click();
             
+            // Mark that this image now has an embedded message
+            setHasEmbeddedMessage(true);
             setIsProcessing(false);
             toast({
               title: "Success",
@@ -115,11 +124,35 @@ const Steganography = () => {
 
     setIsProcessing(true);
     
-    // Simulate message extraction
+    // Simulate message extraction process
     setTimeout(() => {
-      // In a real implementation, this would extract the LSB data
-      const simulatedMessage = secretMessage || "This is a hidden message extracted from the image!";
-      setExtractedMessage(simulatedMessage);
+      // In a real implementation, this would analyze the image's LSB data
+      // For demo purposes, we'll simulate different scenarios
+      let extractedMsg = "";
+      
+      if (hasEmbeddedMessage) {
+        // Simulate extracting a previously embedded message
+        const possibleMessages = [
+          "This is a secret message hidden in the image!",
+          "Confidential data: Project X starts tomorrow",
+          "Password: SecureKey123",
+          "Meeting at midnight, location undisclosed",
+          "The treasure is buried under the old oak tree"
+        ];
+        extractedMsg = possibleMessages[Math.floor(Math.random() * possibleMessages.length)];
+      } else {
+        // No hidden message found
+        extractedMsg = "No hidden message found in this image.";
+        toast({
+          title: "No Message Found",
+          description: "This image doesn't appear to contain any hidden messages",
+          variant: "destructive"
+        });
+        setIsProcessing(false);
+        return;
+      }
+      
+      setExtractedMessage(extractedMsg);
       setIsProcessing(false);
       toast({
         title: "Success",
@@ -160,7 +193,14 @@ const Steganography = () => {
         {/* Image Preview */}
         {imagePreview && (
           <div>
-            <Label className="text-white mb-2 block">Image Preview</Label>
+            <Label className="text-white mb-2 block">
+              Image Preview
+              {hasEmbeddedMessage && (
+                <span className="ml-2 text-xs bg-cyan-600 text-white px-2 py-1 rounded">
+                  Contains Hidden Message
+                </span>
+              )}
+            </Label>
             <div className="relative max-w-md mx-auto">
               <img
                 src={imagePreview}
@@ -177,7 +217,7 @@ const Steganography = () => {
         {/* Secret Message Input */}
         <div>
           <Label htmlFor="message" className="text-white mb-2 block">
-            Secret Message
+            Secret Message (for embedding)
           </Label>
           <Textarea
             id="message"
@@ -239,7 +279,7 @@ const Steganography = () => {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
       </CardContent>
     </Card>
   );
