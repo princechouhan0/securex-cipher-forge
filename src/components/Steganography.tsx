@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Image as ImageIcon, Eye, EyeOff, Upload, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { embedMessage, extractMessage, hasHiddenMessage } from "@/utils/steganography";
 
 const Steganography = () => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -15,7 +16,7 @@ const Steganography = () => {
   const [imagePreview, setImagePreview] = useState<string>("");
   const [hasEmbeddedMessage, setHasEmbeddedMessage] = useState(false);
 
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       if (file.type.startsWith('image/')) {
@@ -26,15 +27,22 @@ const Steganography = () => {
         };
         reader.readAsDataURL(file);
         
-        // Simulate checking if image has embedded message (in real implementation, this would analyze the image)
-        // For demo purposes, we'll randomly determine if the image has a message
-        const hasMessage = Math.random() > 0.5;
-        setHasEmbeddedMessage(hasMessage);
-        
-        toast({
-          title: "Image Selected",
-          description: `Selected: ${file.name}${hasMessage ? ' (Contains hidden message)' : ''}`,
-        });
+        // Check if image actually contains a hidden message
+        try {
+          const hasMessage = await hasHiddenMessage(file);
+          setHasEmbeddedMessage(hasMessage);
+          
+          toast({
+            title: "Image Selected",
+            description: `Selected: ${file.name}${hasMessage ? ' (Contains hidden message)' : ''}`,
+          });
+        } catch (error) {
+          setHasEmbeddedMessage(false);
+          toast({
+            title: "Image Selected",
+            description: `Selected: ${file.name}`,
+          });
+        }
       } else {
         toast({
           title: "Error",
@@ -45,7 +53,7 @@ const Steganography = () => {
     }
   };
 
-  const embedMessage = async () => {
+  const handleEmbedMessage = async () => {
     if (!selectedImage) {
       toast({
         title: "Error",
@@ -66,52 +74,43 @@ const Steganography = () => {
 
     setIsProcessing(true);
     
-    // Simulate steganography embedding process
-    setTimeout(() => {
-      // Create a canvas to simulate image processing
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = document.createElement('img');
+    try {
+      const result = await embedMessage(selectedImage, secretMessage);
       
-      img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx?.drawImage(img, 0, 0);
+      if (result.success && result.blob) {
+        // Download the steganographic image
+        const url = URL.createObjectURL(result.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `stego_${selectedImage.name.replace(/\.[^/.]+$/, "")}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
         
-        // Simulate LSB embedding by slightly modifying the image
-        const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
-        if (imageData) {
-          // Add a subtle watermark effect to show the message was embedded
-          for (let i = 0; i < imageData.data.length; i += 4) {
-            imageData.data[i] = Math.min(255, imageData.data[i] + 1); // Slightly modify red channel
-          }
-          ctx?.putImageData(imageData, 0, 0);
-        }
-        
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `stego_${selectedImage.name}`;
-            a.click();
-            
-            // Mark that this image now has an embedded message
-            setHasEmbeddedMessage(true);
-            setIsProcessing(false);
-            toast({
-              title: "Success",
-              description: "Message embedded in image successfully",
-            });
-          }
-        }, 'image/png');
-      };
-      
-      img.src = imagePreview;
-    }, 2000);
+        // Mark that this image now has an embedded message
+        setHasEmbeddedMessage(true);
+        toast({
+          title: "Success",
+          description: "Message embedded in image successfully! Download started.",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to embed message",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while embedding the message",
+        variant: "destructive"
+      });
+    }
+    
+    setIsProcessing(false);
   };
 
-  const extractMessage = async () => {
+  const handleExtractMessage = async () => {
     if (!selectedImage) {
       toast({
         title: "Error",
@@ -123,41 +122,32 @@ const Steganography = () => {
 
     setIsProcessing(true);
     
-    // Simulate message extraction process
-    setTimeout(() => {
-      // In a real implementation, this would analyze the image's LSB data
-      // For demo purposes, we'll simulate different scenarios
-      let extractedMsg = "";
+    try {
+      const result = await extractMessage(selectedImage);
       
-      if (hasEmbeddedMessage) {
-        // Simulate extracting a previously embedded message
-        const possibleMessages = [
-          "This is a secret message hidden in the image!",
-          "Confidential data: Project X starts tomorrow",
-          "Password: SecureKey123",
-          "Meeting at midnight, location undisclosed",
-          "The treasure is buried under the old oak tree"
-        ];
-        extractedMsg = possibleMessages[Math.floor(Math.random() * possibleMessages.length)];
+      if (result.success && result.message) {
+        setExtractedMessage(result.message);
+        toast({
+          title: "Success",
+          description: "Hidden message extracted successfully",
+        });
       } else {
-        // No hidden message found
-        extractedMsg = "No hidden message found in this image.";
+        setExtractedMessage("No hidden message found in this image.");
         toast({
           title: "No Message Found",
-          description: "This image doesn't appear to contain any hidden messages",
+          description: result.error || "This image doesn't appear to contain any hidden messages",
           variant: "destructive"
         });
-        setIsProcessing(false);
-        return;
       }
-      
-      setExtractedMessage(extractedMsg);
-      setIsProcessing(false);
+    } catch (error) {
       toast({
-        title: "Success",
-        description: "Hidden message extracted successfully",
+        title: "Error",
+        description: "An unexpected error occurred while extracting the message",
+        variant: "destructive"
       });
-    }, 1500);
+    }
+    
+    setIsProcessing(false);
   };
 
   return (
@@ -233,7 +223,7 @@ const Steganography = () => {
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-3">
           <Button
-            onClick={embedMessage}
+            onClick={handleEmbedMessage}
             disabled={isProcessing}
             className="bg-cyan-600 hover:bg-cyan-700 text-white"
           >
@@ -241,7 +231,7 @@ const Steganography = () => {
             {isProcessing ? "Embedding..." : "Hide Message"}
           </Button>
           <Button
-            onClick={extractMessage}
+            onClick={handleExtractMessage}
             disabled={isProcessing}
             variant="outline"
             className="border-cyan-500 text-cyan-400 hover:bg-cyan-600 hover:text-white"
