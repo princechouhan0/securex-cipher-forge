@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FileText, Lock, Unlock, Upload, Download, Shield } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { encryptFile, decryptFile, getOriginalExtension, getMimeType } from "@/utils/fileEncryption";
 
 const FileEncryption = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -33,7 +34,7 @@ const FileEncryption = () => {
     setFileHash(hashHex.substring(0, 16) + "...");
   };
 
-  const simulateEncryption = async () => {
+  const handleEncryptFile = async () => {
     if (!selectedFile) {
       toast({
         title: "Error",
@@ -52,29 +53,55 @@ const FileEncryption = () => {
       return;
     }
 
+    if (password.length < 8) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 8 characters long",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsProcessing(true);
     
-    // Simulate encryption process
-    setTimeout(() => {
-      const encryptedBlob = new Blob([`ENCRYPTED_${selectedFile.name}_${Date.now()}`], {
-        type: 'application/octet-stream'
-      });
+    try {
+      const result = await encryptFile(selectedFile, password);
       
-      const url = URL.createObjectURL(encryptedBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `encrypted_${selectedFile.name}.enc`;
-      a.click();
-      
-      setIsProcessing(false);
+      if (result.success && result.data) {
+        const encryptedBlob = new Blob([result.data], {
+          type: 'application/octet-stream'
+        });
+        
+        const url = URL.createObjectURL(encryptedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedFile.name}.enc`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Success",
+          description: "File encrypted and downloaded successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to encrypt file",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
       toast({
-        title: "Success",
-        description: "File encrypted and downloaded successfully",
+        title: "Error",
+        description: "An unexpected error occurred during encryption",
+        variant: "destructive"
       });
-    }, 2000);
+    }
+    
+    setIsProcessing(false);
   };
 
-  const simulateDecryption = async () => {
+  const handleDecryptFile = async () => {
     if (!selectedFile) {
       toast({
         title: "Error",
@@ -93,26 +120,57 @@ const FileEncryption = () => {
       return;
     }
 
+    // Check if file has .enc extension
+    if (!selectedFile.name.endsWith('.enc')) {
+      toast({
+        title: "Warning",
+        description: "Selected file doesn't appear to be encrypted (no .enc extension)",
+        variant: "destructive"
+      });
+    }
+
     setIsProcessing(true);
     
-    // Simulate decryption process
-    setTimeout(() => {
-      const decryptedBlob = new Blob([`DECRYPTED_${selectedFile.name}_${Date.now()}`], {
-        type: 'text/plain'
-      });
+    try {
+      const result = await decryptFile(selectedFile, password);
       
-      const url = URL.createObjectURL(decryptedBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `decrypted_${selectedFile.name.replace('.enc', '')}`;
-      a.click();
-      
-      setIsProcessing(false);
+      if (result.success && result.data) {
+        // Get original filename and extension
+        const originalName = selectedFile.name.replace('.enc', '');
+        const extension = getOriginalExtension(selectedFile.name);
+        const mimeType = getMimeType(extension);
+        
+        const decryptedBlob = new Blob([result.data], {
+          type: mimeType
+        });
+        
+        const url = URL.createObjectURL(decryptedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = originalName;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Success",
+          description: "File decrypted and downloaded successfully",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to decrypt file",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
       toast({
-        title: "Success",
-        description: "File decrypted and downloaded successfully",
+        title: "Error",
+        description: "An unexpected error occurred during decryption",
+        variant: "destructive"
       });
-    }, 2000);
+    }
+    
+    setIsProcessing(false);
   };
 
   return (
@@ -183,7 +241,7 @@ const FileEncryption = () => {
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-3">
           <Button
-            onClick={simulateEncryption}
+            onClick={handleEncryptFile}
             disabled={isProcessing}
             className="bg-cyan-600 hover:bg-cyan-700 text-white"
           >
@@ -191,7 +249,7 @@ const FileEncryption = () => {
             {isProcessing ? "Encrypting..." : "Encrypt File"}
           </Button>
           <Button
-            onClick={simulateDecryption}
+            onClick={handleDecryptFile}
             disabled={isProcessing}
             variant="outline"
             className="border-cyan-500 text-cyan-400 hover:bg-cyan-600 hover:text-white"
@@ -207,10 +265,10 @@ const FileEncryption = () => {
             <div className="flex items-start gap-3">
               <Shield className="h-5 w-5 text-amber-400 mt-0.5" />
               <div>
-                <h4 className="text-amber-400 font-medium">Security Notice</h4>
+                <h4 className="text-amber-400 font-medium">Security Features</h4>
                 <p className="text-amber-200 text-sm mt-1">
-                  This is a demonstration. In a real implementation, files would be encrypted using AES-256 
-                  with secure key derivation (PBKDF2) and authenticated encryption (GCM mode).
+                  Files are encrypted using AES-256-GCM with PBKDF2 key derivation (100,000 iterations). 
+                  Each file uses a unique salt and initialization vector for maximum security.
                 </p>
               </div>
             </div>
