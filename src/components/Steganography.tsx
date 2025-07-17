@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Image, Eye, EyeOff, Upload, Download } from "lucide-react";
+import { Image as ImageIcon, Eye, EyeOff, Upload, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 const Steganography = () => {
@@ -164,7 +164,7 @@ const Steganography = () => {
     <Card className="bg-slate-800/50 border border-slate-700">
       <CardHeader>
         <CardTitle className="text-white flex items-center gap-2">
-          <Image className="h-5 w-5 text-cyan-400" />
+          <ImageIcon className="h-5 w-5 text-cyan-400" />
           Image Steganography
         </CardTitle>
         <CardDescription className="text-slate-400">
