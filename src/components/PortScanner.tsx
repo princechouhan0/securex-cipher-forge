@@ -268,32 +268,215 @@ const PortScanner = () => {
   };
 
   const exportResults = () => {
-    const reportData = {
-      timestamp: new Date().toISOString(),
-      target,
-      scanType: scanPreset,
-      totalScanned: getPortsToScan().length,
-      openPorts: results.length,
-      results,
-      summary: {
-        critical: results.filter(r => r.risk === "critical").length,
-        high: results.filter(r => r.risk === "high").length,
-        medium: results.filter(r => r.risk === "medium").length,
-        low: results.filter(r => r.risk === "low").length
-      }
+    const summary = {
+      critical: results.filter(r => r.risk === "critical").length,
+      high: results.filter(r => r.risk === "high").length,
+      medium: results.filter(r => r.risk === "medium").length,
+      low: results.filter(r => r.risk === "low").length
     };
 
-    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Port Scan Report - ${target}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8fafc; color: #1a1a1a; line-height: 1.6; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+        
+        .report-header { 
+            background: linear-gradient(135deg, #0ea5e9, #06b6d4); 
+            color: white; 
+            padding: 40px; 
+            border-radius: 12px; 
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .report-header h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 10px; }
+        .report-header .subtitle { font-size: 1.1rem; opacity: 0.9; }
+        .scan-info { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px; margin-top: 20px; }
+        
+        .summary-section { 
+            background: white; 
+            padding: 30px; 
+            margin-bottom: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .summary-title { font-size: 1.8rem; color: #1e293b; margin-bottom: 20px; font-weight: 700; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; }
+        .stat-card { 
+            background: #f8fafc; 
+            padding: 20px; 
+            border-radius: 8px; 
+            text-align: center; 
+            border: 2px solid transparent;
+        }
+        .stat-card.critical { border-color: #dc2626; }
+        .stat-card.high { border-color: #ea580c; }
+        .stat-card.medium { border-color: #d97706; }
+        .stat-card.low { border-color: #16a34a; }
+        .stat-value { font-size: 2rem; font-weight: bold; margin-bottom: 5px; }
+        .stat-critical .stat-value { color: #dc2626; }
+        .stat-high .stat-value { color: #ea580c; }
+        .stat-medium .stat-value { color: #d97706; }
+        .stat-low .stat-value { color: #16a34a; }
+        .stat-label { font-size: 0.9rem; color: #64748b; font-weight: 600; }
+        
+        .ports-section { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .port-item { 
+            padding: 25px; 
+            margin-bottom: 20px; 
+            border-radius: 8px; 
+            border-left: 5px solid;
+            background: #f8fafc;
+        }
+        .port-critical { border-left-color: #dc2626; background: #fef2f2; }
+        .port-high { border-left-color: #ea580c; background: #fff7ed; }
+        .port-medium { border-left-color: #d97706; background: #fffbeb; }
+        .port-low { border-left-color: #16a34a; background: #f0fdf4; }
+        
+        .port-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .port-number { font-size: 1.3rem; font-weight: 700; color: #1e293b; }
+        .port-service { font-size: 1rem; color: #64748b; margin-top: 5px; }
+        
+        .risk-badge { 
+            padding: 5px 12px; 
+            border-radius: 20px; 
+            font-size: 0.8rem; 
+            font-weight: bold; 
+            text-transform: uppercase;
+        }
+        .risk-critical { background: #dc2626; color: white; }
+        .risk-high { background: #ea580c; color: white; }
+        .risk-medium { background: #d97706; color: white; }
+        .risk-low { background: #16a34a; color: white; }
+        
+        .port-description { color: #64748b; margin-bottom: 20px; }
+        .recommendations { }
+        .recommendations-title { font-weight: 600; margin-bottom: 10px; color: #16a34a; }
+        
+        .rec-list { list-style: none; }
+        .rec-list li { 
+            padding: 5px 0; 
+            padding-left: 20px; 
+            position: relative;
+        }
+        .rec-list li:before { content: '🔧'; position: absolute; left: 0; }
+        
+        .report-footer { 
+            background: #1e293b; 
+            color: white; 
+            padding: 30px; 
+            text-align: center; 
+            border-radius: 12px; 
+            margin-top: 30px;
+        }
+        .timestamp { font-size: 0.9rem; opacity: 0.8; }
+        
+        @media print {
+            body { background: white; }
+            .container { max-width: none; margin: 0; padding: 15px; }
+            .summary-section, .ports-section { box-shadow: none; border: 1px solid #ddd; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="report-header">
+            <h1>🔍 Port Scan Report</h1>
+            <div class="subtitle">Network Security Assessment for ${target}</div>
+            <div class="scan-info">
+                <strong>Target:</strong> ${target} | 
+                <strong>Scan Type:</strong> ${scanPresets[scanPreset]?.name || 'Custom'} | 
+                <strong>Ports Scanned:</strong> ${getPortsToScan().length} |
+                <strong>Open Ports:</strong> ${results.length} |
+                <strong>Date:</strong> ${new Date().toLocaleString()}
+            </div>
+        </div>
+
+        <div class="summary-section">
+            <h2 class="summary-title">📊 Scan Summary</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">${results.length}</div>
+                    <div class="stat-label">Open Ports</div>
+                </div>
+                <div class="stat-card critical">
+                    <div class="stat-value stat-critical">${summary.critical}</div>
+                    <div class="stat-label">Critical Risk</div>
+                </div>
+                <div class="stat-card high">
+                    <div class="stat-value stat-high">${summary.high}</div>
+                    <div class="stat-label">High Risk</div>
+                </div>
+                <div class="stat-card medium">
+                    <div class="stat-value stat-medium">${summary.medium}</div>
+                    <div class="stat-label">Medium Risk</div>
+                </div>
+                <div class="stat-card low">
+                    <div class="stat-value stat-low">${summary.low}</div>
+                    <div class="stat-label">Low Risk</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ports-section">
+            <h2 class="summary-title">🌐 Open Ports & Security Analysis</h2>
+            ${results.map(port => `
+                <div class="port-item port-${port.risk}">
+                    <div class="port-header">
+                        <div>
+                            <div class="port-number">Port ${port.port}</div>
+                            <div class="port-service">${port.service} Service</div>
+                        </div>
+                        <div class="risk-badge risk-${port.risk}">${port.risk} Risk</div>
+                    </div>
+                    <div class="port-description">${port.description}</div>
+                    <div class="recommendations">
+                        <div class="recommendations-title">Security Recommendations</div>
+                        <ul class="rec-list">
+                            ${port.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `).join('')}
+            
+            ${results.length === 0 ? `
+                <div style="text-align: center; padding: 40px; color: #16a34a;">
+                    <h3>✅ No Open Ports Detected</h3>
+                    <p>Your system appears to be well-secured with no publicly accessible services found.</p>
+                </div>
+            ` : ''}
+        </div>
+
+        <div class="report-footer">
+            <div>🔒 Generated by SecureX Port Scanner</div>
+            <div class="timestamp">Report generated on ${new Date().toLocaleString()}</div>
+        </div>
+    </div>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `port-scan-report-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `port-scan-report-${target.replace(/[^a-zA-Z0-9]/g, '_')}-${new Date().toISOString().split('T')[0]}.html`;
     a.click();
     URL.revokeObjectURL(url);
 
     toast({
       title: "Report Exported",
-      description: "Port scan report has been downloaded",
+      description: "Professional port scan report has been downloaded as HTML",
     });
   };
 
